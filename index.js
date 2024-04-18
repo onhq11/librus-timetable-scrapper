@@ -40,8 +40,7 @@ function parseICSFileContent(content, eventsList = []) {
         const event = parsedData[key];
         if (
           event.type === "VEVENT" &&
-          dayjs(event.start).isAfter(dayjs()) &&
-          dayjs(event.end).isBefore(dayjs().add(1, "day"))
+          dayjs(event.start).isAfter(dayjs())
         ) {
           const eventsToRemove = eventsList?.filter(
             (item) =>
