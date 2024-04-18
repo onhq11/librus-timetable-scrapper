@@ -1,8 +1,8 @@
 const { google } = require("googleapis");
 const puppeteer = require("puppeteer");
 const dotenv = require("dotenv");
-const ical = require("node-ical")
-const dayjs = require("dayjs")
+const ical = require("node-ical");
+const dayjs = require("dayjs");
 
 dotenv.config();
 
@@ -27,49 +27,72 @@ async function downloadICSFile(page) {
   }
 }
 
-
 function parseICSFileContent(content, eventsList = []) {
   return new Promise((resolve) => {
     const out = {
       eventsToInsert: [],
-      eventsToRemove: []
+      eventsToRemove: [],
+    };
+
+    const parsedData = ical.sync.parseICS(content);
+    for (const key in parsedData) {
+      if (parsedData.hasOwnProperty(key)) {
+        const event = parsedData[key];
+        if (
+          event.type === "VEVENT" &&
+          dayjs(event.start).isAfter(dayjs()) &&
+          dayjs(event.end).isBefore(dayjs().add(1, "day"))
+        ) {
+          const eventsToRemove = eventsList?.filter(
+            (item) =>
+              dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
+              dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
+              event.summary !== item.summary,
+          );
+          eventsToRemove.map((item) => {
+            out.eventsToRemove.push({
+              calendarEvent: item,
+              icsEvent: event,
+            });
+
+            out.eventsToInsert.push({
+              summary: event.summary,
+              description: event.description,
+              start: { dateTime: event.start },
+              end: { dateTime: event.end },
+              location:
+                "Zespół Szkół Elektrycznych, Dąbrowskiego 33, 66-400 Gorzów Wielkopolski, Polska",
+            });
+          });
+
+          if (
+            !eventsList?.some(
+              (item) =>
+                dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
+                dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
+                item.summary === event.summary,
+            ) &&
+            !out.eventsToInsert?.some(
+              (item) =>
+                dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
+                dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
+                item.summary === event.summary,
+            )
+          ) {
+            out.eventsToInsert.push({
+              summary: event.summary,
+              description: event.description,
+              start: { dateTime: event.start },
+              end: { dateTime: event.end },
+              location:
+                "Zespół Szkół Elektrycznych, Dąbrowskiego 33, 66-400 Gorzów Wielkopolski, Polska",
+            });
+          }
+        }
+      }
     }
 
-      const parsedData = ical.sync.parseICS(content);
-      for (const key in parsedData) {
-          if (parsedData.hasOwnProperty(key)) {
-              const event = parsedData[key];
-              if (event.type === 'VEVENT' && dayjs(event.start).isAfter(dayjs())) {
-                  const eventsToRemove = eventsList?.filter((item) => dayjs(item.start.dateTime).isSame(dayjs(event.start)) && dayjs(item.end.dateTime).isSame(dayjs(event.end)) && event.summary !== item.summary)
-                  eventsToRemove.map((item) => {
-                    out.eventsToRemove.push({
-                      calendarEvent: item,
-                      icsEvent: event
-                    })
-
-                    out.eventsToInsert.push({
-                      summary: event.summary,
-                      description: event.description,
-                      start: {dateTime: event.start},
-                      end: {dateTime: event.end},
-                      location: "Zespół Szkół Elektrycznych, Dąbrowskiego 33, 66-400 Gorzów Wielkopolski, Polska"
-                    });
-                  })
-
-                  if(!eventsList?.some((item) => dayjs(item.start.dateTime).isSame(dayjs(event.start)) && dayjs(item.start.dateTime).isSame(dayjs(event.start)))) {
-                    out.eventsToInsert.push({
-                      summary: event.summary,
-                      description: event.description,
-                      start: {dateTime: event.start},
-                      end: {dateTime: event.end},
-                      location: "Zespół Szkół Elektrycznych, Dąbrowskiego 33, 66-400 Gorzów Wielkopolski, Polska"
-                    });
-                  }
-              }
-          }
-      }
-
-      resolve(out);
+    resolve(out);
   });
 }
 
@@ -100,17 +123,23 @@ function parseICSFileContent(content, eventsList = []) {
     scopes: "https://www.googleapis.com/auth/calendar",
   });
   const calendar = google.calendar({ version: "v3", auth });
-  const eventsList = await calendar.events.list({calendarId: calendarId, timeMin: dayjs().toDate()});
+  const eventsList = await calendar.events.list({
+    calendarId: calendarId,
+    timeMin: dayjs().toDate(),
+  });
 
   const events = await parseICSFileContent(icsContent, eventsList.data?.items);
   events.eventsToRemove?.map(async (item) => {
-      try {
-        await calendar.events.delete({calendarId: calendarId, eventId: item.calendarEvent?.id})
-        console.log('Event deleted successfully:', item.calendarEvent?.id);
-      } catch (error) {
-        console.error('Error deleting event:', error.message)
-      }
-  })
+    try {
+      await calendar.events.delete({
+        calendarId: calendarId,
+        eventId: item.calendarEvent?.id,
+      });
+      console.log("Event deleted successfully:", item.calendarEvent?.id);
+    } catch (error) {
+      console.error("Error deleting event:", error.message);
+    }
+  });
 
   for (const event of events.eventsToInsert) {
     try {
@@ -118,9 +147,22 @@ function parseICSFileContent(content, eventsList = []) {
         calendarId,
         resource: event,
       });
-      console.log('Event inserted successfully:', event.summary, "||", dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"));
+      console.log(
+        "Event inserted successfully:",
+        event.summary,
+        "||",
+        dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"),
+      );
     } catch (error) {
-      console.error('Error inserting event:', error.message, "(", event.summary, "||", dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"), ")");
+      console.error(
+        "Error inserting event:",
+        error.message,
+        "(",
+        event.summary,
+        "||",
+        dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"),
+        ")",
+      );
     }
   }
 })();
