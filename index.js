@@ -99,7 +99,7 @@ function parseICSFileContent(content, eventsList = []) {
 }
 
 async function getTimetable() {
-  const browser = await puppeteer.launch({ headless: false });
+  const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
 
   const client = await page.target().createCDPSession();
