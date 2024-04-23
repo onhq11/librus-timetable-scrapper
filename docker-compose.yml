@@ -1,0 +1,11 @@
+services:
+  librus-timetable-scrapper:
+    image: onhq/librus-timetable-scrapper
+    container_name: librus-timetable-scrapper
+    volumes:
+      - .:/app
+    environment:
+      LIBRUS_LOGIN: ${LIBRUS_LOGIN}
+      LIBRUS_PASS: ${LIBRUS_PASS}
+      CALENDAR_ID: ${CALENDAR_ID}
+      INTERVAL_MS: ${INTERVAL_MS}

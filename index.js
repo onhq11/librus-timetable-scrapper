@@ -10,6 +10,9 @@ const login = process.env.LIBRUS_LOGIN;
 const pass = process.env.LIBRUS_PASS;
 const calendarId = process.env.CALENDAR_ID;
 
+// const interval = setInterval(getTimetable, process.env.INTERVAL_MS)
+getTimetable()
+
 async function downloadICSFile(page) {
   try {
     const res = await page.evaluate(() => {
@@ -95,7 +98,7 @@ function parseICSFileContent(content, eventsList = []) {
   });
 }
 
-(async () => {
+async function getTimetable() {
   const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
 
@@ -164,4 +167,4 @@ function parseICSFileContent(content, eventsList = []) {
       );
     }
   }
-})();
+}
