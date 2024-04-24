@@ -95,6 +95,8 @@ function parseICSFileContent(content, eventsList = []) {
 }
 
 async function getTimetable() {
+  console.log("Getting timetable...", "||", dayjs().format("YYYY-MM-DD HH:mm"))
+
   const browser = await puppeteer.launch({
     executablePath: "/usr/bin/google-chrome",
     headless: "new",
@@ -167,3 +169,5 @@ async function getTimetable() {
     }
   }
 }
+
+console.log("App initialized successfuly", "||", dayjs().format("YYYY-MM-DD HH:mm"))
