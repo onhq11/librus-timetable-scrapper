@@ -130,3 +130,5 @@ dist
 .pnp.*
 
 credentials.json
+
+.DS_Store
