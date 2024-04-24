@@ -10,8 +10,7 @@ const login = process.env.LIBRUS_LOGIN;
 const pass = process.env.LIBRUS_PASS;
 const calendarId = process.env.CALENDAR_ID;
 
-// const interval = setInterval(getTimetable, process.env.INTERVAL_MS)
-getTimetable()
+setInterval(getTimetable, process.env.INTERVAL_MS);
 
 async function downloadICSFile(page) {
   try {
@@ -41,10 +40,7 @@ function parseICSFileContent(content, eventsList = []) {
     for (const key in parsedData) {
       if (parsedData.hasOwnProperty(key)) {
         const event = parsedData[key];
-        if (
-          event.type === "VEVENT" &&
-          dayjs(event.start).isAfter(dayjs())
-        ) {
+        if (event.type === "VEVENT" && dayjs(event.start).isAfter(dayjs())) {
           const eventsToRemove = eventsList?.filter(
             (item) =>
               dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
@@ -99,14 +95,17 @@ function parseICSFileContent(content, eventsList = []) {
 }
 
 async function getTimetable() {
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    executablePath: "/usr/bin/google-chrome",
+    headless: "new",
+    ignoreDefaultArgs: ["--disable-extensions"],
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
   const page = await browser.newPage();
 
-  const client = await page.target().createCDPSession();
-  await client.send("Page.setDownloadBehavior", {
-    behavior: "allow",
-    downloadPath: "./downloads",
-  });
+  page.setUserAgent(
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36",
+  );
 
   await page.goto("https://aplikacje.edukacja.gorzow.pl/");
   await page.type("#Username", login);

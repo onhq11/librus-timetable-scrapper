@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "author": "onhq11",
   "license": "ISC",
   "dependencies": {
@@ -15,5 +12,8 @@
     "ical.js": "^2.0.0",
     "node-ical": "^0.18.0",
     "puppeteer": "^22.6.3"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5"
   }
 }

@@ -3,7 +3,7 @@ services:
     image: onhq/librus-timetable-scrapper
     container_name: librus-timetable-scrapper
     volumes:
-      - .:/app
+      - .:/usr/src/app
     environment:
       LIBRUS_LOGIN: ${LIBRUS_LOGIN}
       LIBRUS_PASS: ${LIBRUS_PASS}
