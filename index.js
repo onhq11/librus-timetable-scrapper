@@ -3,6 +3,10 @@ const puppeteer = require("puppeteer");
 const dotenv = require("dotenv");
 const ical = require("node-ical");
 const dayjs = require("dayjs");
+const { format } = require("path");
+const { teardownHeapProfiler } = require("next/dist/build/swc");
+const { start } = require("repl");
+const { table } = require("console");
 
 dotenv.config();
 
@@ -10,7 +14,8 @@ const login = process.env.LIBRUS_LOGIN;
 const pass = process.env.LIBRUS_PASS;
 const calendarId = process.env.CALENDAR_ID;
 
-setInterval(getTimetable, process.env.INTERVAL_MS);
+// setInterval(getTimetable, process.env.INTERVAL_MS);
+getTimetable();
 
 async function downloadICSFile(page) {
   try {
@@ -20,7 +25,7 @@ async function downloadICSFile(page) {
         {
           method: "GET",
           credentials: "include",
-        },
+        }
       ).then((r) => r.text());
     });
     return res;
@@ -45,7 +50,7 @@ function parseICSFileContent(content, eventsList = []) {
             (item) =>
               dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
               dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
-              event.summary !== item.summary,
+              event.summary !== item.summary
           );
           eventsToRemove.map((item) => {
             out.eventsToRemove.push({
@@ -68,13 +73,13 @@ function parseICSFileContent(content, eventsList = []) {
               (item) =>
                 dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
                 dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
-                item.summary === event.summary,
+                item.summary === event.summary
             ) &&
             !out.eventsToInsert?.some(
               (item) =>
                 dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
                 dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
-                item.summary === event.summary,
+                item.summary === event.summary
             )
           ) {
             out.eventsToInsert.push({
@@ -94,19 +99,97 @@ function parseICSFileContent(content, eventsList = []) {
   });
 }
 
+async function getTimtableEvents(page) {
+   return await page.evaluate(() => {
+    let timetableEvents = [];
+    const todayElement = document.querySelectorAll(".container-background table tbody tr .center.today");
+    let todayIndex = Array.from(document.querySelectorAll(".container-background table tbody tr .center")).findIndex(el => el.classList.contains('today'))
+    if(todayElement.length > 0){
+      let eventsAfterToday = Array.from(document.querySelectorAll(".container-background table tbody tr .center")).slice(todayIndex);
+      timetableEvents = eventsAfterToday.flatMap((timetableEvent) => {
+        return Array.from(timetableEvent.querySelectorAll(".center table tbody tr td")).map((timetableEvent) => timetableEvent.getAttribute("onclick"));
+      });
+    } else {
+      timetableEvents = Array.from(document.querySelectorAll(".center table tbody tr td")).map((timetableEvent) => timetableEvent.getAttribute("onclick"));
+    }
+    return timetableEvents;
+  });
+}
+
+async function fetchEventDetails(page) {
+  return await page.evaluate(() => {
+    const rows = document.querySelectorAll(".container-background table tbody tr");
+    
+    const date = rows[0].querySelector("td").textContent.trim();
+    const type = rows[3].querySelector("td").textContent.trim();
+    const subject = rows[4].querySelector("td").textContent;
+
+    let description = rows[5];
+    while (description.querySelector("th").textContent.trim() !== "Opis") {
+      description = description.nextElementSibling;
+    }
+
+    return {
+      summary: type + ", " + subject,
+      description: description.querySelector("td").textContent,
+      date: {date: date},
+    }
+  });
+}
+
+async function navigateToNextMonth(page){
+  await page.evaluate(() => {
+    let monthdropdown = document.querySelector('.ListaWyboru[name="miesiac"]');
+    let newmonth = (parseInt([...document.querySelectorAll('.ListaWyboru[name="miesiac"] option')].find(option => option.selected).value) + 1) % 12;
+    if(newmonth == 0){
+      newmonth = 12;
+    } 
+    if (newmonth / 12 >= 1 ){
+      let yeardropdown = document.querySelector('.ListaWyboru[name="rok"]');
+      let newyear = parseInt([...document.querySelectorAll('.ListaWyboru[name="rok"] option')].find(option => option.selected).value) + 1;
+      yeardropdown.value = newyear;
+      yeardropdown.dispatchEvent(new Event('change'));
+    }
+    monthdropdown.value = newmonth;
+    monthdropdown.dispatchEvent(new Event('change'));
+  });
+  
+  await page.waitForNavigation();
+}
+
+async function processTimetableEvents(page) {
+  let eventDetailsTable = [];
+  for (let i = 0; i < 3; i++){
+    let timetableEvents = await getTimtableEvents(page);
+
+    for (const timetableEvent of timetableEvents) {
+      if (timetableEvent) {
+        await page.goto("https://synergia.librus.pl" + timetableEvent.split("'")[1]);
+        await page.waitForSelector("body .container");
+
+        const eventDetail = await fetchEventDetails(page);
+        eventDetailsTable.push(eventDetail);
+      }
+    }
+    await page.goto("https://synergia.librus.pl/terminarz/");
+    await page.waitForSelector('.ListaWyboru[name="miesiac"]');
+    await navigateToNextMonth(page);
+  }
+  return eventDetailsTable;
+}
+
 async function getTimetable() {
-  console.log("Getting timetable...", "||", dayjs().format("YYYY-MM-DD HH:mm"))
+  console.log("Getting timetable...", "||", dayjs().format("YYYY-MM-DD HH:mm"));
 
   const browser = await puppeteer.launch({
-    executablePath: "/usr/bin/google-chrome",
-    headless: "new",
+    headless: false,
     ignoreDefaultArgs: ["--disable-extensions"],
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   const page = await browser.newPage();
 
   page.setUserAgent(
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36"
   );
 
   await page.goto("https://aplikacje.edukacja.gorzow.pl/");
@@ -119,6 +202,11 @@ async function getTimetable() {
   await page.waitForSelector("#user-section");
 
   const icsContent = await downloadICSFile(page);
+
+  await page.goto("https://synergia.librus.pl/terminarz/");
+  await page.waitForSelector(".center table tbody tr td");
+
+  let eventDetailsTable = await processTimetableEvents(page);
   browser.close();
 
   const auth = new google.auth.GoogleAuth({
@@ -154,7 +242,7 @@ async function getTimetable() {
         "Event inserted successfully:",
         event.summary,
         "||",
-        dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"),
+        dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm")
       );
     } catch (error) {
       console.error(
@@ -164,10 +252,61 @@ async function getTimetable() {
         event.summary,
         "||",
         dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"),
-        ")",
+        ")"
+      );
+    }
+  }
+  
+  for(let i = 0; i < eventsList.data.items.length; i++){
+    if(eventsList.data.items[i].start.date){
+      try {
+        await calendar.events.delete({
+          calendarId: calendarId,
+          eventId: eventsList.data.items[i].id,
+        });
+        console.log("Event deleted successfully:", eventsList.data.items[i].summary);
+      } catch (error) {
+        console.error("Error deleting event:", error.message);
+      }
+    }
+  }
+
+  for (const eventDetails of eventDetailsTable){
+    const eventResource = {
+      summary: eventDetails.summary,
+      description: eventDetails.description,
+      start: eventDetails.date,
+      end: eventDetails.date,
+      location:
+        "Zespół Szkół Elektrycznych, Dąbrowskiego 33, 66-400 Gorzów Wielkopolski, Polska",
+    };
+    try {
+      await calendar.events.insert({
+        calendarId,
+        resource: eventResource,
+      });
+      console.log(
+        "Event inserted successfully:",
+        eventDetails.summary,
+        "||",
+        dayjs(eventDetails.start?.dateTime).format("YYYY-MM-DD HH:mm")
+      );
+    } catch (error) {
+      console.error(
+        "Error inserting event:",
+        error.message,
+        "(",
+        eventDetails.summary,
+        "||",
+        dayjs(eventDetails.start?.dateTime).format("YYYY-MM-DD HH:mm"),
+        ")"
       );
     }
   }
 }
 
-console.log("App initialized successfuly", "||", dayjs().format("YYYY-MM-DD HH:mm"))
+console.log(
+  "App initialized successfuly",
+  "||",
+  dayjs().format("YYYY-MM-DD HH:mm")
+);
