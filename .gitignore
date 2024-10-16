@@ -132,3 +132,5 @@ dist
 credentials.json
 
 .DS_Store
+
+.idea
