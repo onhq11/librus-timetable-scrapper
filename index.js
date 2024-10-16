@@ -184,7 +184,7 @@ async function processTimetableEvents(page) {
     let timetableEvents = await getTimetableEvents(page);
 
     for (const timetableEvent of timetableEvents) {
-      if (timetableEvent) {
+      if (timetableEvent && timetableEvent.includes("terminarz/szczegoly/")) {
         await page.goto(
           "https://synergia.librus.pl" + timetableEvent.split("'")[1],
         );
