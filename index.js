@@ -10,6 +10,8 @@ const login = process.env.LIBRUS_LOGIN;
 const pass = process.env.LIBRUS_PASS;
 const calendarId = process.env.CALENDAR_ID;
 
+let daysOffTable = [];
+
 setInterval(getTimetable, process.env.INTERVAL_MS);
 getTimetable();
 
@@ -21,7 +23,7 @@ async function downloadICSFile(page) {
         {
           method: "GET",
           credentials: "include",
-        },
+        }
       ).then((r) => r.text());
     });
     return res;
@@ -46,7 +48,7 @@ function parseICSFileContent(content, eventsList = []) {
             (item) =>
               dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
               dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
-              event.summary !== item.summary,
+              event.summary !== item.summary
           );
           eventsToRemove.map((item) => {
             out.eventsToRemove.push({
@@ -69,13 +71,13 @@ function parseICSFileContent(content, eventsList = []) {
               (item) =>
                 dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
                 dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
-                item.summary === event.summary,
+                item.summary === event.summary
             ) &&
             !out.eventsToInsert?.some(
               (item) =>
                 dayjs(item.start.dateTime).isSame(dayjs(event.start)) &&
                 dayjs(item.end.dateTime).isSame(dayjs(event.end)) &&
-                item.summary === event.summary,
+                item.summary === event.summary
             )
           ) {
             out.eventsToInsert.push({
@@ -99,25 +101,25 @@ async function getTimetableEvents(page) {
   return await page.evaluate(() => {
     let timetableEvents = [];
     const todayElement = document.querySelectorAll(
-      ".container-background table tbody tr .center.today",
+      ".container-background table tbody tr .center.today"
     );
     let todayIndex = Array.from(
-      document.querySelectorAll(".container-background table tbody tr .center"),
+      document.querySelectorAll(".container-background table tbody tr .center")
     ).findIndex((el) => el.classList.contains("today"));
     if (todayElement.length > 0) {
       let eventsAfterToday = Array.from(
         document.querySelectorAll(
-          ".container-background table tbody tr .center",
-        ),
+          ".container-background table tbody tr .center"
+        )
       ).slice(todayIndex);
       timetableEvents = eventsAfterToday.flatMap((timetableEvent) => {
         return Array.from(
-          timetableEvent.querySelectorAll(".center table tbody tr td"),
+          timetableEvent.querySelectorAll(".center table tbody tr td")
         ).map((timetableEvent) => timetableEvent.getAttribute("onclick"));
       });
     } else {
       timetableEvents = Array.from(
-        document.querySelectorAll(".center table tbody tr td"),
+        document.querySelectorAll(".center table tbody tr td")
       ).map((timetableEvent) => timetableEvent.getAttribute("onclick"));
     }
     return timetableEvents;
@@ -127,7 +129,7 @@ async function getTimetableEvents(page) {
 async function fetchEventDetails(page) {
   return await page.evaluate(() => {
     const rows = document.querySelectorAll(
-      ".container-background table tbody tr",
+      ".container-background table tbody tr"
     );
 
     const date = rows[0].querySelector("td").textContent.trim();
@@ -147,32 +149,32 @@ async function fetchEventDetails(page) {
   });
 }
 
+async function fetchDaysOff(page) {
+  return await page.evaluate(() => {
+    return {
+      date: { date: document.querySelectorAll(".container-background table tbody tr")[0].querySelector("td").textContent.trim() },
+    };
+  });
+}
+
 async function navigateToNextMonth(page) {
   await page.evaluate(() => {
     let monthDropdown = document.querySelector('.ListaWyboru[name="miesiac"]');
-    let newMonth =
-      (parseInt(
-        [
-          ...document.querySelectorAll('.ListaWyboru[name="miesiac"] option'),
-        ].find((option) => option.selected).value,
-      ) +
-        1) %
-      12;
-    if (newMonth === 0) {
-      newMonth = 12;
-    }
-    if (newMonth / 12 >= 1) {
+    let currentMonthOption = [...document.querySelectorAll('.ListaWyboru[name="miesiac"] option')].find((option) => option.selected);
+    let newMonth = parseInt(currentMonthOption.value) + 1;
+
+    if (newMonth > 12) {
+      newMonth = 1;
+      
       let yearDropdown = document.querySelector('.ListaWyboru[name="rok"]');
-      yearDropdown.value =
-        parseInt(
-          [
-            ...document.querySelectorAll('.ListaWyboru[name="rok"] option'),
-          ].find((option) => option.selected).value,
-        ) + 1;
+      let currentYearOption = [...document.querySelectorAll('.ListaWyboru[name="rok"] option')].find((option) => option.selected);
+      yearDropdown.value = parseInt(currentYearOption.value) + 1;
       yearDropdown.dispatchEvent(new Event("change"));
     }
+
     monthDropdown.value = newMonth;
     monthDropdown.dispatchEvent(new Event("change"));
+
   });
 
   await page.waitForNavigation();
@@ -180,13 +182,22 @@ async function navigateToNextMonth(page) {
 
 async function processTimetableEvents(page) {
   let eventDetailsTable = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i <= 3; i++) {
     let timetableEvents = await getTimetableEvents(page);
 
     for (const timetableEvent of timetableEvents) {
-      if (timetableEvent && timetableEvent.includes("terminarz/szczegoly/")) {
+      if(timetableEvent && timetableEvent.includes("terminarz/szczegoly_wolne/")){
         await page.goto(
-          "https://synergia.librus.pl" + timetableEvent.split("'")[1],
+          "https://synergia.librus.pl" + timetableEvent.split("'")[1]
+        );
+        await page.waitForSelector("body .container");
+
+        const dayOffDetail = await fetchDaysOff(page);
+        daysOffTable.push(dayOffDetail);
+
+      } else if (timetableEvent && timetableEvent.includes("terminarz/szczegoly/")) {
+        await page.goto(
+          "https://synergia.librus.pl" + timetableEvent.split("'")[1]
         );
         await page.waitForSelector("body .container");
 
@@ -205,15 +216,14 @@ async function getTimetable() {
   console.log("Getting timetable...", "||", dayjs().format("YYYY-MM-DD HH:mm"));
 
   const browser = await puppeteer.launch({
-    executablePath: "/usr/bin/google-chrome",
-    headless: "new",
+    headless: false,
     ignoreDefaultArgs: ["--disable-extensions"],
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   const page = await browser.newPage();
 
   page.setUserAgent(
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36"
   );
 
   await page.goto("https://aplikacje.edukacja.gorzow.pl/");
@@ -240,8 +250,12 @@ async function getTimetable() {
   const calendar = google.calendar({ version: "v3", auth });
   const eventsList = await calendar.events.list({
     calendarId: calendarId,
-    timeMin: dayjs().toDate(),
+    timeMin: dayjs().subtract(1, 'day').toDate(),
   });
+
+
+  const uniqueDaysOffTable = Array.from(new Set(daysOffTable.map(a => a.date.date)))
+  console.log(uniqueDaysOffTable)
 
   const events = await parseICSFileContent(icsContent, eventsList.data?.items);
   events.eventsToRemove?.map(async (item) => {
@@ -266,7 +280,7 @@ async function getTimetable() {
         "Event inserted successfully:",
         event.summary,
         "||",
-        dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"),
+        dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm")
       );
     } catch (error) {
       console.error(
@@ -276,7 +290,7 @@ async function getTimetable() {
         event.summary,
         "||",
         dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"),
-        ")",
+        ")"
       );
     }
   }
@@ -290,7 +304,7 @@ async function getTimetable() {
         });
         console.log(
           "Event deleted successfully:",
-          eventsList.data.items[i].summary,
+          eventsList.data.items[i].summary
         );
       } catch (error) {
         console.error("Error deleting event:", error.message);
@@ -316,7 +330,7 @@ async function getTimetable() {
         "Event inserted successfully:",
         eventDetails.summary,
         "||",
-        dayjs(eventDetails.start?.dateTime).format("YYYY-MM-DD HH:mm"),
+        dayjs(eventDetails.start?.dateTime).format("YYYY-MM-DD HH:mm")
       );
     } catch (error) {
       console.error(
@@ -326,7 +340,7 @@ async function getTimetable() {
         eventDetails.summary,
         "||",
         dayjs(eventDetails.start?.dateTime).format("YYYY-MM-DD HH:mm"),
-        ")",
+        ")"
       );
     }
   }
@@ -335,5 +349,5 @@ async function getTimetable() {
 console.log(
   "App initialized successfuly",
   "||",
-  dayjs().format("YYYY-MM-DD HH:mm"),
+  dayjs().format("YYYY-MM-DD HH:mm")
 );
