@@ -3,6 +3,10 @@ const puppeteer = require("puppeteer");
 const dotenv = require("dotenv");
 const ical = require("node-ical");
 const dayjs = require("dayjs");
+const isBetween = require('dayjs/plugin/isBetween');
+const { Console } = require("console");
+
+dayjs.extend(isBetween);
 
 dotenv.config();
 
@@ -182,7 +186,7 @@ async function navigateToNextMonth(page) {
 
 async function processTimetableEvents(page) {
   let eventDetailsTable = [];
-  for (let i = 0; i <= 3; i++) {
+  for (let i = 0; i < 3; i++) {
     let timetableEvents = await getTimetableEvents(page);
 
     for (const timetableEvent of timetableEvents) {
@@ -250,12 +254,18 @@ async function getTimetable() {
   const calendar = google.calendar({ version: "v3", auth });
   const eventsList = await calendar.events.list({
     calendarId: calendarId,
-    timeMin: dayjs().subtract(1, 'day').toDate(),
+    timeMin: dayjs().toISOString(),
+    timeMax: dayjs().add(3, 'month').toISOString(),
+    singleEvents: true,
   });
 
+  const existingEventsMap = new Map();
+  eventsList.data.items.forEach(event => {
+    const eventKey = `${dayjs(event.start.dateTime).format("YYYY-MM-DD HH:mm")}_${event.summary}`;
+    existingEventsMap.set(eventKey, true);
+  });
 
   const uniqueDaysOffTable = Array.from(new Set(daysOffTable.map(a => a.date.date)))
-  console.log(uniqueDaysOffTable)
 
   const events = await parseICSFileContent(icsContent, eventsList.data?.items);
   events.eventsToRemove?.map(async (item) => {
@@ -271,27 +281,51 @@ async function getTimetable() {
   });
 
   for (const event of events.eventsToInsert) {
-    try {
-      await calendar.events.insert({
-        calendarId,
-        resource: event,
-      });
-      console.log(
-        "Event inserted successfully:",
-        event.summary,
-        "||",
-        dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm")
-      );
-    } catch (error) {
-      console.error(
-        "Error inserting event:",
-        error.message,
-        "(",
-        event.summary,
-        "||",
-        dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"),
-        ")"
-      );
+    const eventDate = dayjs(event.start.dateTime).format("YYYY-MM-DD");
+
+    const isEventInRange = (eventDate, dateRange) => {
+      if (!dateRange) return false;
+      const [startDate, endDate] = dateRange.split(' - ');
+      const eventDay = dayjs(eventDate);
+      const startDay = dayjs(startDate);
+      const endDay = dayjs(endDate);
+
+      return eventDay.isBetween(startDay, endDay, 'day', '[]');
+    };
+
+    const eventKey = `${dayjs(event.start.dateTime).format("YYYY-MM-DD HH:mm")}_${event.summary}`;
+    const isEventInCalendar = existingEventsMap.has(eventKey);
+
+    if (isEventInCalendar) {
+      continue;
+    }
+
+    dateRange = uniqueDaysOffTable.find((item) => item.includes(eventDate))
+    if (isEventInRange(eventDate, uniqueDaysOffTable.find((item) => item.includes(eventDate)))) {
+      console.log(`Event on ${eventDate} is within range: ${dateRange}`);
+    } else {
+      try {
+        await calendar.events.insert({
+          calendarId,
+          resource: event,
+        });
+        console.log(
+          "Event inserted successfully:",
+          event.summary,
+          "||",
+          dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm")
+        );
+      } catch (error) {
+        console.error(
+          "Error inserting event:",
+          error.message,
+          "(",
+          event.summary,
+          "||",
+          dayjs(event.start?.dateTime).format("YYYY-MM-DD HH:mm"),
+          ")"
+        );
+      }
     }
   }
 
