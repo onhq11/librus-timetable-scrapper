@@ -254,7 +254,7 @@ async function getTimetable() {
   const calendar = google.calendar({ version: "v3", auth });
   const eventsList = await calendar.events.list({
     calendarId: calendarId,
-    timeMin: dayjs().toISOString(),
+    timeMin: dayjs().startOf('day').toISOString(),
     timeMax: dayjs().add(3, 'month').toISOString(),
     singleEvents: true,
   });
