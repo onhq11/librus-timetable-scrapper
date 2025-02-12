@@ -245,9 +245,10 @@ async function getTimetable() {
   console.log("Getting timetable...", "||", dayjs().format("YYYY-MM-DD HH:mm"));
 
   const browser = await puppeteer.launch({
+    executablePath: "/usr/bin/google-chrome",
+    headless: "new",
     ignoreDefaultArgs: ["--disable-extensions"],
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    headless: false
   });
   const page = await browser.newPage();
 
