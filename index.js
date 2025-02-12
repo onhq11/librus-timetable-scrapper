@@ -134,18 +134,32 @@ async function fetchEventDetails(page) {
       ".container-background table tbody tr",
     );
 
-    const date = rows[0].querySelector("td").textContent.trim();
-    const type = rows[3].querySelector("td").textContent.trim();
-    const subject = rows[4].querySelector("td").textContent;
+    if(rows.length <= 4) {
+      return null
+    }
 
+    const date = rows[0]?.querySelector("td")?.textContent?.trim();
+    const type = rows[3]?.querySelector("td")?.textContent?.trim();
+    const subject = rows[4]?.querySelector("td")?.textContent;
+
+    if(rows.length <= 5) {
+      return {
+        summary: type + ", " + subject,
+        description: "",
+        date: { date: date },
+      };
+    }
+    
     let description = rows[5];
-    while (description.querySelector("th").textContent.trim() !== "Opis") {
-      description = description.nextElementSibling;
+    if(!!description?.nextElementSibling) {
+      while (description?.querySelector("th")?.textContent?.trim() !== "Opis") {
+        description = description.nextElementSibling;
+      }
     }
 
     return {
       summary: type + ", " + subject,
-      description: description.querySelector("td").textContent,
+      description: description?.querySelector("td").textContent,
       date: { date: date },
     };
   });
@@ -157,8 +171,8 @@ async function fetchDaysOff(page) {
       date: {
         date: document
           .querySelectorAll(".container-background table tbody tr")[0]
-          .querySelector("td")
-          .textContent.trim(),
+          ?.querySelector("td")
+          ?.textContent.trim(),
       },
     };
   });
@@ -231,10 +245,9 @@ async function getTimetable() {
   console.log("Getting timetable...", "||", dayjs().format("YYYY-MM-DD HH:mm"));
 
   const browser = await puppeteer.launch({
-    executablePath: "/usr/bin/google-chrome",
-    headless: "new",
     ignoreDefaultArgs: ["--disable-extensions"],
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    headless: false
   });
   const page = await browser.newPage();
 
