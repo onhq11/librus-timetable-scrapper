@@ -1,5 +1,5 @@
 FROM node:lts
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV TZ=Europe/Warsaw
 
 RUN apt-get update && apt-get install gnupg wget -y && \
