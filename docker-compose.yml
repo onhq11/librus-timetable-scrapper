@@ -1,6 +1,6 @@
 services:
   librus-timetable-scrapper:
-    image: onhq/librus-timetable-scrapper
+    image: onhq/librus-timetable-scrapper:latest
     container_name: librus-timetable-scrapper
     volumes:
       - .:/usr/src/app
